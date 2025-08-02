@@ -1,5 +1,4 @@
 import React from "react";
-import { View, Text } from "react-native";
 import DynamicTabs, { TabItem } from "../components/DynamicTabs";
 import Home from "./home";
 
@@ -9,27 +8,59 @@ export default function TabsScreen({ navigation }: any) {
     {
       id: "workouts",
       title: "Workouts",
-      content: <Home navigation={navigation} />,
+
+      needsScrollHandler: true,
+      content: (scrollHandler) => (
+        <Home
+          navigation={navigation}
+          onScroll={scrollHandler} // Pass the scroll handler here
+        />
+      ),
     },
     {
       id: "routines",
       title: "Routines",
-      content: <Home navigation={navigation} />,
+      needsScrollHandler: true,
+
+      content: (scrollHandler) => (
+        <Home
+          navigation={navigation}
+          onScroll={scrollHandler} // Pass the scroll handler here
+        />
+      ),
     },
     {
       id: "favourites",
       title: "Favs",
-      content: <Home navigation={navigation} />,
+      content: (scrollHandler) => (
+        <Home
+          navigation={navigation}
+          onScroll={scrollHandler} // Pass the scroll handler here
+        />
+      ),
+      needsScrollHandler: true,
     },
     {
       id: "bip_bop",
       title: "BipBop",
-      content: <Home navigation={navigation} />,
+      content: (scrollHandler) => (
+        <Home
+          navigation={navigation}
+          onScroll={scrollHandler} // Pass the scroll handler here
+        />
+      ),
+      needsScrollHandler: true,
     },
     {
       id: "bap_boop",
       title: "BapBoop",
-      content: <Home navigation={navigation} />,
+      content: (scrollHandler) => (
+        <Home
+          navigation={navigation}
+          onScroll={scrollHandler} // Pass the scroll handler here
+        />
+      ),
+      needsScrollHandler: true,
     },
   ];
 
@@ -39,9 +70,6 @@ export default function TabsScreen({ navigation }: any) {
       navigation={navigation}
       maxLoadedTabs={3}
       tabTitle="Workouts"
-      tabBarStyle={{ paddingHorizontal: 12 }}
-      indicatorStyle={{ backgroundColor: "#222222" }}
-      containerStyle={{ backgroundColor: "#fafafa" }}
     />
   );
 }

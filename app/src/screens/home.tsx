@@ -1,5 +1,7 @@
 import {
   ActivityIndicator,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
   RefreshControl,
@@ -10,16 +12,30 @@ import {
 } from "react-native";
 import React from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LegendList } from "@legendapp/list";
-import { FlashList } from "@shopify/flash-list";
+import { FlashList, FlashListProps } from "@shopify/flash-list";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useBottomTabBarHeight } from "react-native-bottom-tabs";
 
 import { StatusBar } from "expo-status-bar";
 import { useWorkouts } from "../utils/useWorkouts";
 import { useQueryClient } from "@tanstack/react-query";
+import Animated, { SharedValue } from "react-native-reanimated";
 
-const Home = ({ navigation }: { navigation: any }) => {
+const AnimatedFlashList =
+  Animated.createAnimatedComponent<FlashListProps<any>>(FlashList);
+
+const Home = ({
+  navigation,
+  onScroll,
+}: {
+  navigation: any;
+  onScroll?:
+    | ((event: NativeSyntheticEvent<NativeScrollEvent>) => void)
+    | SharedValue<
+        ((event: NativeSyntheticEvent<NativeScrollEvent>) => void) | undefined
+      >
+    | undefined;
+}) => {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
@@ -37,7 +53,6 @@ const Home = ({ navigation }: { navigation: any }) => {
 
   // Function to handle refresh - resets to first page using queryClient
   const handleRefresh = async () => {
-    // Reset the query data to initial state
     queryClient.setQueryData(["workouts"], (oldData: any) => {
       if (!oldData) return oldData;
       return {
@@ -47,7 +62,6 @@ const Home = ({ navigation }: { navigation: any }) => {
       };
     });
 
-    // Then refetch the first page
     await refetch();
   };
 
@@ -57,11 +71,13 @@ const Home = ({ navigation }: { navigation: any }) => {
     <View style={[styles.container]}>
       <StatusBar style="dark" />
 
-      <FlashList
+      <AnimatedFlashList
+        onScroll={onScroll}
         data={[...workouts]}
         onEndReached={() => fetchNextPage()}
         keyExtractor={(item, index) => index.toString()}
         onEndReachedThreshold={0.128}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             style={{ position: "relative" }}
@@ -70,7 +86,6 @@ const Home = ({ navigation }: { navigation: any }) => {
           />
         }
         contentContainerStyle={{
-          backgroundColor: "transparent",
           paddingTop: 24,
           paddingBottom: Platform.OS === "ios" ? tabBarHeight : 0,
         }}
@@ -146,8 +161,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#ffffff",
     width: "100%",
-    alignItems: "center",
-    justifyContent: "center",
   },
   listHeader: {
     paddingHorizontal: 12,

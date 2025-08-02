@@ -4,7 +4,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NavigationContainer } from "@react-navigation/native";
 import RootStack from "./src/navigation/RootStack";
 import { KeyboardProvider } from "react-native-keyboard-controller";
-import { Session } from "@supabase/supabase-js";
+import { JwtPayload, Session } from "@supabase/supabase-js";
 import { supabase } from "./src/utils/supabase";
 import AuthStack from "./src/navigation/AuthStack";
 import * as SplashScreen from "expo-splash-screen";
@@ -21,7 +21,7 @@ SplashScreen.setOptions({
 });
 
 function App() {
-  const [session, setSession] = useState<Session | null>(null);
+  const [claims, setClaims] = useState<JwtPayload | undefined>();
   const [appIsReady, setAppIsReady] = useState(false);
 
   useEffect(() => {
@@ -31,16 +31,16 @@ function App() {
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log(
-        "🚀 ~ supabase.auth.getSession ~ session:",
-        session?.user?.email
-      );
-      setSession(session);
+    supabase.auth.getClaims().then(({ data }) => {
+      const claims = data?.claims;
+      setClaims(claims);
     });
-    supabase.auth.onAuthStateChange((_event, session) => {
-      console.log("🚀 ~ App ~ session:", session?.user?.email);
-      setSession(session);
+    supabase.auth.onAuthStateChange((_event, _session) => {
+      console.log("🚀 ~ App ~ _event:", _event);
+      supabase.auth.getClaims().then(({ data }) => {
+        const claims = data?.claims;
+        setClaims(claims);
+      });
     });
   }, []);
   console.log("We in here");
@@ -66,7 +66,7 @@ function App() {
       <NavigationContainer>
         <KeyboardProvider>
           <SafeAreaProvider onLayout={onLayoutRootView}>
-            {session && session?.user ? <RootStack /> : <AuthStack />}
+            {claims && claims?.session_id ? <RootStack /> : <AuthStack />}
           </SafeAreaProvider>
         </KeyboardProvider>
       </NavigationContainer>

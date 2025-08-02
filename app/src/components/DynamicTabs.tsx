@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
   Pressable,
   ScrollView,
+  Platform,
 } from "react-native";
 import Animated, {
   useSharedValue,
@@ -19,18 +20,19 @@ import Animated, {
   useAnimatedScrollHandler,
   interpolate,
   SharedValue,
+  Extrapolation,
+  withSpring,
 } from "react-native-reanimated";
-import { runOnJS } from "react-native-worklets";
+import { runOnJS, runOnUI } from "react-native-worklets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Entypo from "@expo/vector-icons/Entypo";
-import { FlashList } from "@shopify/flash-list";
-import { LazyLegendList } from "@legendapp/list";
 
 // Types
 export interface TabItem {
   id: string;
   title: string;
-  content: React.ReactNode;
+  content: React.ReactNode | ((scrollHandler?: any) => React.ReactNode);
+  needsScrollHandler?: boolean;
 }
 
 interface TabProps {
@@ -136,24 +138,20 @@ const Indicator = React.memo(
 );
 
 // Main Component
-function DynamicTabs({
-  tabs,
-  maxLoadedTabs = 2,
-  tabBarStyle,
-  tabStyle,
-  tabTitle,
-  indicatorStyle,
-  containerStyle,
-  contentContainerStyle,
-}: DynamicTabsProps) {
-  const [loadedTabs, setLoadedTabs] = useState<Set<number>>(new Set([0]));
+function DynamicTabs({ tabs, maxLoadedTabs = 2, tabTitle }: DynamicTabsProps) {
+  const [loadedTabs, setLoadedTabs] = useState<Set<number>>(new Set([0, 1]));
+  console.log("🚀 ~ DynamicTabs ~ loadedTabs:", loadedTabs);
   const containerRef = useRef<ScrollView>(null);
+  const headingRef = useRef<Animated.View>(null);
   const [activeTab, setActiveTab] = useState(0);
   const insets = useSafeAreaInsets();
   const [headerHeight, setHeaderHeight] = useState(0);
+  const [headingHeight, setHeadingHeight] = useState<number>(0);
   const { width } = useWindowDimensions();
   const scrollRef = useRef<Animated.ScrollView>(null);
   const scrollX = useSharedValue(0);
+  const scrollY = useSharedValue(0);
+
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
 
   const accessoryViewRef = useRef<Animated.View>(null);
@@ -171,6 +169,7 @@ function DynamicTabs({
       arr.push(index);
       return new Set(arr);
     });
+    scrollY.value = withSpring(0);
   };
 
   const scrollActiveTabInCenter = (index: number) => {
@@ -194,6 +193,13 @@ function DynamicTabs({
     updateActiveTab(index);
   };
 
+  const innerScrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      "worklet";
+      scrollY.value = event.contentOffset.y;
+    },
+  });
+
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       "worklet";
@@ -207,9 +213,24 @@ function DynamicTabs({
     },
   });
 
-  const renderTabContent = (index: number) => {
+  const renderTabContent = (index: number): React.ReactNode => {
     if (!loadedTabs.has(index)) return null;
-    return tabs[index]?.content || null;
+
+    const tab = tabs[index];
+    if (!tab) return null;
+
+    const { content, needsScrollHandler } = tab;
+
+    // Check if content is a function
+    if (typeof content === "function") {
+      // Pass the innerScrollHandler if the tab needs it
+      return (
+        content(needsScrollHandler ? innerScrollHandler : undefined) || null
+      );
+    }
+
+    // Content is already a ReactNode
+    return content || null;
   };
 
   useEffect(() => {
@@ -246,37 +267,82 @@ function DynamicTabs({
   }, [tabs.length]);
 
   useLayoutEffect(() => {
+    headingRef.current?.measure((x, y, width, height, pageX, pageY) => {
+      console.log("Heading height:", height);
+      setHeadingHeight(height);
+    });
+  }, []);
+
+  useLayoutEffect(() => {
     accessoryViewRef.current?.measure((x, y, width, height, pageX, pageY) => {
+      console.log("🚀 ~ DynamicTabs ~ height:", height);
       setHeaderHeight(height);
     });
   }, []);
 
+  const headerAnimatedStyle = useAnimatedStyle(() => {
+    "worklet";
+    const interpolatedHeadingHeight = interpolate(
+      scrollY.value,
+      [0, Platform.OS === "ios" ? headingHeight * 1.128 : headerHeight],
+      [0, headingHeight + 16],
+      Extrapolation.CLAMP
+    );
+
+    return {
+      transform: [{ translateY: -interpolatedHeadingHeight }],
+    };
+  }, [headingHeight, headerHeight, insets.top]);
+
+  const headingAnimatedStyle = useAnimatedStyle(() => {
+    "worklet";
+
+    const interpolatedOpacity = interpolate(
+      scrollY.value,
+      [0, Platform.OS === "ios" ? headingHeight * 1.128 : headerHeight],
+      [1, 0],
+      Extrapolation.CLAMP
+    );
+
+    return {
+      opacity: interpolatedOpacity,
+    };
+  }, [headingHeight, headerHeight]);
+
+  const paddingTopStyle = useAnimatedStyle(() => {
+    "worklet";
+    const interpolatedPaddingTop = interpolate(
+      scrollY.value,
+      [0, Platform.OS === "ios" ? headingHeight * 1.128 : headerHeight],
+      [headerHeight, headerHeight - headingHeight - 16],
+      Extrapolation.CLAMP
+    );
+
+    return {
+      paddingTop: interpolatedPaddingTop,
+    };
+  }, [headingHeight, headerHeight]);
+
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          paddingTop: insets.top,
-        },
-        containerStyle,
-      ]}
-    >
-      <View
+    <View style={[styles.container]}>
+      <Animated.View
         ref={accessoryViewRef}
-        style={{
-          width: "100%",
-          gap: 12,
-          // position: "absolute",
-          // top: insets.top,
-          // left: 0,
-          // zIndex: 10,
-          // right: 0,
-          // backgroundColor: "red",
-          height: "auto",
-        }}
+        style={[
+          {
+            width: "100%",
+            gap: 16,
+            position: "absolute",
+            paddingTop: insets.top,
+            left: 0,
+            zIndex: 10,
+            right: 0,
+            height: "auto",
+          },
+          headerAnimatedStyle,
+        ]}
       >
-        {/* HEADER TOP TEXT + ACCESSORY BUTTONS */}
         <Animated.View
+          ref={headingRef}
           style={[
             {
               flexDirection: "row",
@@ -285,6 +351,7 @@ function DynamicTabs({
               justifyContent: "space-between",
               paddingHorizontal: 12,
             },
+            headingAnimatedStyle,
           ]}
         >
           <Text
@@ -297,12 +364,11 @@ function DynamicTabs({
           </Pressable>
         </Animated.View>
 
-        {/* TABS RENDER HERE */}
         <ScrollView
           horizontal
           bounces={false}
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={[styles.tabBar, tabBarStyle]}
+          contentContainerStyle={[styles.tabBar]}
           ref={containerRef}
         >
           {tabs.map((tab, index) => (
@@ -313,17 +379,17 @@ function DynamicTabs({
               index={index}
               activeTab={activeTab}
               onTabPress={onTabPress}
-              style={tabStyle}
             />
           ))}
           <Indicator
             measurements={measurements}
             scrollX={scrollX}
             tabsLength={tabs.length}
-            style={indicatorStyle}
           />
         </ScrollView>
-      </View>
+      </Animated.View>
+
+      {/* Content Container */}
 
       <Animated.ScrollView
         ref={scrollRef}
@@ -331,14 +397,15 @@ function DynamicTabs({
         pagingEnabled
         onScroll={scrollHandler}
         scrollEventThrottle={16}
+        automaticallyAdjustContentInsets
         showsHorizontalScrollIndicator={false}
-        // contentContainerStyle={[{ paddingTop: headerHeight }]}
-        style={contentContainerStyle}
+        contentContainerStyle={[paddingTopStyle]}
+        style={[{}, paddingTopStyle]}
       >
         {tabs.map((_, index) => (
-          <View key={`content_${index}`} style={{ width, flex: 1 }}>
+          <Animated.View key={`content_${index}`} style={[{ width, flex: 1 }]}>
             {renderTabContent(index)}
-          </View>
+          </Animated.View>
         ))}
       </Animated.ScrollView>
     </View>
@@ -351,13 +418,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     zIndex: -2,
-    backgroundColor: "#fafafa",
   },
   tabBar: {
     flexDirection: "row",
     paddingHorizontal: 12,
     position: "relative",
-    marginBottom: 12,
+    paddingBottom: 12,
   },
   tabButton: {
     paddingVertical: 12,
@@ -383,307 +449,3 @@ const styles = StyleSheet.create({
     left: 0,
   },
 });
-
-// import React, { forwardRef, useEffect, useRef, useState } from "react";
-// import {
-//   View,
-//   Text,
-//   StyleSheet,
-//   useWindowDimensions,
-//   Pressable,
-//   ScrollView,
-// } from "react-native";
-// import Animated, {
-//   useSharedValue,
-//   useAnimatedStyle,
-//   useAnimatedScrollHandler,
-//   interpolate,
-//   runOnJS,
-//   SharedValue,
-// } from "react-native-reanimated";
-// import { useSafeAreaInsets } from "react-native-safe-area-context";
-// import Home from "./home";
-
-// const TABS = [
-//   { title: "Workouts", ref: React.createRef<View>() },
-//   { title: "Nutrition", ref: React.createRef<View>() },
-//   { title: "Favourites", ref: React.createRef<View>() },
-// ];
-
-// const Tab = forwardRef<
-//   View,
-//   {
-//     index: number;
-//     title: string;
-//     onTabPress: any;
-//     activeTab: number;
-//   }
-// >(({ index, title, onTabPress, activeTab }, ref) => {
-//   const isActive = activeTab === index;
-
-//   return (
-//     <Pressable
-//       ref={ref}
-//       onLayout={(e) => {
-//         console.log("E:", e.nativeEvent?.layout?.width);
-//       }}
-//       onPress={() => onTabPress(index)}
-//       style={[styles.tabButton]}
-//     >
-//       <Text style={[styles.tabText, isActive && styles.activeTabText]}>
-//         {title}
-//       </Text>
-//     </Pressable>
-//   );
-// });
-
-// type Measurement = { x: number; y: number; width: number; height: number };
-
-// interface IndicatorProps {
-//   measurements: Measurement[];
-//   scrollX: SharedValue<number>;
-// }
-
-// const Indicator = React.memo(({ measurements, scrollX }: IndicatorProps) => {
-//   const { width } = useWindowDimensions();
-
-//   const animatedStyle = useAnimatedStyle(() => {
-//     "worklet";
-//     // Don't animate if measurements aren't ready
-//     if (!measurements || measurements.length === 0) {
-//       return {
-//         opacity: 0,
-//       };
-//     }
-
-//     const inputRange = [];
-//     const widthOutputRange = [];
-//     const translateOutputRange = [];
-
-//     for (let i = 0; i < TABS.length; i++) {
-//       inputRange.push(i * width);
-//       widthOutputRange.push(measurements[i]?.width);
-//       translateOutputRange.push(measurements[i]?.x);
-//     }
-
-//     const indicatorWidth = interpolate(
-//       scrollX.value,
-//       inputRange,
-//       widthOutputRange,
-//       "clamp"
-//     );
-
-//     const translateX = interpolate(
-//       scrollX.value,
-//       inputRange,
-//       translateOutputRange,
-//       "clamp"
-//     );
-
-//     return {
-//       opacity: 1,
-//       width: indicatorWidth,
-//       transitionProperty: "width",
-//       transform: [{ translateX }],
-//     };
-//   }, [measurements, width]);
-
-//   // Don't render anything if measurements aren't ready
-//   if (!measurements || measurements.length === 0) {
-//     return null;
-//   }
-
-//   return <Animated.View style={[styles.tabIndicator, animatedStyle]} />;
-// });
-
-// export default function TabsScreen({ navigation }: any) {
-//   const [loadedTabs, setLoadedTabs] = useState<Set<number>>(new Set([0]));
-//   const containerRef = useRef<ScrollView>(null);
-//   const [activeTab, setActiveTab] = useState(0);
-//   const insets = useSafeAreaInsets();
-//   const { width } = useWindowDimensions();
-//   const scrollRef = useRef<Animated.ScrollView>(null);
-//   const scrollX = useSharedValue(0);
-//   const [measurements, setMeasurements] = useState<Measurement[]>([]);
-
-//   const updateActiveTab = (index: number) => {
-//     setActiveTab(index);
-//     setLoadedTabs((prev) => {
-//       if (prev.has(index)) return prev;
-//       const arr = Array.from(prev);
-//       if (arr.length >= 2) arr.shift();
-//       arr.push(index);
-//       return new Set(arr);
-//     });
-//   };
-
-//   const scrollActiveTabInCenter = (index: number) => {
-//     // Scroll the tab into view if needed
-
-//     if (measurements.length > 0 && containerRef.current) {
-//       const tabMeasurement = measurements[index];
-//       if (tabMeasurement) {
-//         // Calculate the position to center the tab
-//         const tabCenter = tabMeasurement.x + tabMeasurement.width / 2;
-//         const containerWidth = width; // or get actual container width
-//         const scrollToX = Math.max(0, tabCenter - containerWidth / 2);
-
-//         containerRef.current.scrollTo({
-//           x: scrollToX,
-//           animated: true,
-//         });
-//       }
-//     }
-//   };
-
-//   const onTabPress = (index: number) => {
-//     scrollRef.current?.scrollTo({ x: width * index, animated: true });
-//     scrollActiveTabInCenter(index);
-//     updateActiveTab(index);
-//   };
-
-//   const scrollHandler = useAnimatedScrollHandler({
-//     onScroll: (event) => {
-//       "worklet";
-//       scrollX.value = event.contentOffset.x;
-//     },
-
-//     onMomentumEnd: (event) => {
-//       "worklet";
-//       const index = Math.round(event.contentOffset.x / width);
-//       runOnJS(updateActiveTab)(index);
-//       runOnJS(scrollActiveTabInCenter)(index);
-//     },
-//   });
-
-//   const renderTabContent = (index: number) => {
-//     if (!loadedTabs.has(index)) return null;
-//     switch (index) {
-//       case 0:
-//         return <Home navigation={navigation} />;
-//       case 1:
-//         return (
-//           <View style={{ flex: 1, backgroundColor: "#fff" }}>
-//             <Text>Second tab</Text>
-//           </View>
-//         );
-//       case 2:
-//         return (
-//           <View style={{ flex: 1, backgroundColor: "#fff" }}>
-//             <Text>Third tab</Text>
-//           </View>
-//         );
-//       default:
-//         return null;
-//     }
-//   };
-
-//   useEffect(() => {
-//     if (!containerRef?.current) return;
-//     let m: Measurement[] = [];
-//     TABS.forEach((tab) => {
-//       tab.ref?.current?.measureLayout(
-//         containerRef?.current,
-//         (x, y, width, height) => {
-//           m.push({
-//             x,
-//             y,
-//             width,
-//             height,
-//           });
-
-//           if (m.length === TABS.length) {
-//             setMeasurements(m);
-//           }
-//         }
-//       );
-//     });
-//   }, [containerRef, TABS]);
-
-//   return (
-//     <View
-//       style={[
-//         styles.container,
-//         {
-//           paddingTop: insets.top,
-//         },
-//       ]}
-//     >
-//       <View style={{ width: "100%", height: "auto" }}>
-//         <ScrollView
-//           horizontal
-//           bounces={false}
-//           showsHorizontalScrollIndicator={false}
-//           contentContainerStyle={styles.tabBar}
-//           ref={containerRef}
-//         >
-//           {TABS.map((tab, index) => {
-//             return (
-//               <Tab
-//                 ref={tab?.ref}
-//                 key={`tab_${index}`}
-//                 title={tab?.title}
-//                 index={index}
-//                 activeTab={activeTab}
-//                 onTabPress={onTabPress}
-//               />
-//             );
-//           })}
-//           <Indicator measurements={measurements} scrollX={scrollX} />
-//         </ScrollView>
-//       </View>
-
-//       <Animated.ScrollView
-//         ref={scrollRef}
-//         horizontal
-//         pagingEnabled
-//         onScroll={scrollHandler}
-//         scrollEventThrottle={16}
-//         showsHorizontalScrollIndicator={false}
-//       >
-//         {TABS.map((_, index) => (
-//           <View key={index} style={{ width, flex: 1 }}>
-//             {renderTabContent(index)}
-//           </View>
-//         ))}
-//       </Animated.ScrollView>
-//     </View>
-//   );
-// }
-
-// const styles = StyleSheet.create({
-//   container: {
-//     flex: 1,
-//     zIndex: -2,
-//     backgroundColor: "#fafafa",
-//   },
-//   tabBar: {
-//     flexDirection: "row",
-//     paddingHorizontal: 12,
-//     position: "relative",
-//     marginBottom: 12,
-//   },
-//   tabButton: {
-//     paddingVertical: 12,
-//     paddingHorizontal: 16,
-//     alignItems: "center",
-//   },
-//   tabText: {
-//     fontSize: 16,
-//     fontFamily: "Manrope",
-//     color: "#777",
-//     fontWeight: "700",
-//   },
-//   activeTabText: {
-//     color: "#ffffff",
-//   },
-//   tabIndicator: {
-//     height: "100%",
-//     zIndex: -1,
-//     borderRadius: 16,
-//     backgroundColor: "#222",
-//     position: "absolute",
-//     top: 0,
-//     left: 0,
-//   },
-// });
