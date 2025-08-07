@@ -22,43 +22,49 @@ SplashScreen.setOptions({
 
 function App() {
   const [claims, setClaims] = useState<JwtPayload | undefined>();
-  const [appIsReady, setAppIsReady] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true); // Add auth loading state
 
   useEffect(() => {
-    setTimeout(() => {
-      setAppIsReady(true);
-    }, 250);
-  }, []);
+    // Get initial session
+    const getInitialSession = async () => {
+      const { data, error } = await supabase.auth.getClaims();
+      if (error) {
+        console.error("Error getting initial session:", error);
+      } else {
+        const claims = data?.claims;
+        console.log("🚀 ~ getInitialSession ~ claims:", claims);
+        setClaims(claims);
+      }
+      setAuthLoading(false); // Set loading to false after initial check
+    };
 
-  useEffect(() => {
-    supabase.auth.getClaims().then(({ data }) => {
-      const claims = data?.claims;
-      setClaims(claims);
-    });
+    getInitialSession();
+
+    // Listen for auth changes
     supabase.auth.onAuthStateChange((_event, _session) => {
       console.log("🚀 ~ App ~ _event:", _event);
-      supabase.auth.getClaims().then(({ data }) => {
-        const claims = data?.claims;
-        setClaims(claims);
+      supabase.auth.getClaims().then(({ data, error }) => {
+        if (error) {
+          console.error("Error getting claims:", error);
+        } else {
+          const claims = data?.claims;
+          setClaims(claims);
+        }
       });
     });
   }, []);
-  console.log("We in here");
 
-  const onLayoutRootView = useCallback(() => {
+  const onLayoutRootView = useCallback(async () => {
     console.log("Root layout");
-    if (appIsReady) {
-      // This tells the splash screen to hide immediately! If we call this after
-      // `setAppIsReady`, then we may see a blank screen while the app is
-      // loading its initial state and rendering its first pixels. So instead,
-      // we hide the splash screen once we know the root view has already
-      // performed layout.
-      SplashScreen.hide();
+    if (!authLoading) {
+      // Hide splash screen when both app and auth are ready
+      await SplashScreen.hideAsync();
     }
-  }, [appIsReady]);
+  }, [authLoading]);
 
-  if (!appIsReady) {
-    return null;
+  // Show splash screen while loading
+  if (authLoading) {
+    return null; // This keeps the splash screen visible
   }
 
   return (
@@ -66,7 +72,7 @@ function App() {
       <NavigationContainer>
         <KeyboardProvider>
           <SafeAreaProvider onLayout={onLayoutRootView}>
-            {claims && claims?.session_id ? <RootStack /> : <AuthStack />}
+            {claims ? <RootStack /> : <AuthStack />}
           </SafeAreaProvider>
         </KeyboardProvider>
       </NavigationContainer>

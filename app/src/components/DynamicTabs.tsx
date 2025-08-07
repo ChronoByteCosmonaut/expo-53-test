@@ -140,7 +140,6 @@ const Indicator = React.memo(
 // Main Component
 function DynamicTabs({ tabs, maxLoadedTabs = 2, tabTitle }: DynamicTabsProps) {
   const [loadedTabs, setLoadedTabs] = useState<Set<number>>(new Set([0, 1]));
-  console.log("🚀 ~ DynamicTabs ~ loadedTabs:", loadedTabs);
   const containerRef = useRef<ScrollView>(null);
   const headingRef = useRef<Animated.View>(null);
   const [activeTab, setActiveTab] = useState(0);
@@ -268,23 +267,22 @@ function DynamicTabs({ tabs, maxLoadedTabs = 2, tabTitle }: DynamicTabsProps) {
 
   useLayoutEffect(() => {
     headingRef.current?.measure((x, y, width, height, pageX, pageY) => {
-      console.log("Heading height:", height);
       setHeadingHeight(height);
     });
   }, []);
 
   useLayoutEffect(() => {
     accessoryViewRef.current?.measure((x, y, width, height, pageX, pageY) => {
-      console.log("🚀 ~ DynamicTabs ~ height:", height);
       setHeaderHeight(height);
     });
   }, []);
 
   const headerAnimatedStyle = useAnimatedStyle(() => {
     "worklet";
+    // Platform.OS === "ios" ? headingHeight * 1.44
     const interpolatedHeadingHeight = interpolate(
       scrollY.value,
-      [0, Platform.OS === "ios" ? headingHeight * 1.128 : headerHeight],
+      [0, headerHeight],
       [0, headingHeight + 16],
       Extrapolation.CLAMP
     );
@@ -299,7 +297,7 @@ function DynamicTabs({ tabs, maxLoadedTabs = 2, tabTitle }: DynamicTabsProps) {
 
     const interpolatedOpacity = interpolate(
       scrollY.value,
-      [0, Platform.OS === "ios" ? headingHeight * 1.128 : headerHeight],
+      [0, headerHeight],
       [1, 0],
       Extrapolation.CLAMP
     );
@@ -313,7 +311,7 @@ function DynamicTabs({ tabs, maxLoadedTabs = 2, tabTitle }: DynamicTabsProps) {
     "worklet";
     const interpolatedPaddingTop = interpolate(
       scrollY.value,
-      [0, Platform.OS === "ios" ? headingHeight * 1.128 : headerHeight],
+      [0, headerHeight],
       [headerHeight, headerHeight - headingHeight - 16],
       Extrapolation.CLAMP
     );
