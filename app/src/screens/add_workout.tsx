@@ -14,7 +14,7 @@ import Input from "../components/Input";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../utils/supabase";
 
-const offset = { closed: 0, opened: 24 };
+const offset = { closed: 0, opened: 12 };
 
 const workoutFormSchema = z.object({
   title: z.string().min(2).max(50),

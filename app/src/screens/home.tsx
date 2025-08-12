@@ -5,16 +5,18 @@ import {
   Platform,
   Pressable,
   RefreshControl,
-  StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from "react-native";
+import { StyleSheet } from "react-native-unistyles";
+
 import React from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FlashList, FlashListProps } from "@shopify/flash-list";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useBottomTabBarHeight } from "react-native-bottom-tabs";
+import { AnimatedLegendList } from "@legendapp/list/reanimated";
 
 import { StatusBar } from "expo-status-bar";
 import { useWorkouts } from "../utils/useWorkouts";
@@ -127,7 +129,7 @@ const Home = ({
             );
           }
         }}
-        style={{ width: "100%", position: "relative" }}
+        // style={{ width: "100%", position: "relative" }}
         renderItem={({ item, index }) => {
           return (
             <View style={styles.workoutItem}>
